@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Пошук предметів — тренажер стажера</title>
+<style>
+  :root{
+    --bg-deep: #0d0f2b;
+    --bg-purple: #2d1b69;
+    --accent: #6c5ce7;
+    --accent-light: #8b7cf6;
+    --panel: rgba(255,255,255,0.06);
+    --panel-solid: #ffffff;
+    --text-main: #f2f2ff;
+    --text-dim: #b8b8d8;
+    --danger: #e63946;
+  }
+
+  *{ box-sizing: border-box; }
+
+  html, body{
+    margin:0; padding:0; min-height:100vh;
+    font-family: "Segoe UI", Roboto, Arial, sans-serif;
+    background: radial-gradient(circle at 20% 20%, var(--bg-purple), var(--bg-deep) 60%);
+    color: var(--text-main);
+  }
+
+  #app{
+    max-width: 1100px;
+    margin: 24px auto;
+    padding: 0 16px 40px;
+  }
+
+  /* ---------- TOP BAR ---------- */
+  .top-bar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background: var(--panel);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 14px 22px;
+    margin-bottom: 18px;
+    backdrop-filter: blur(6px);
+  }
+  .top-bar .level-badge{
+    font-weight:700;
+    font-size: 18px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-light));
+    padding: 6px 16px;
+    border-radius: 999px;
+  }
+  .top-bar .timer{
+    font-size: 22px;
+    font-weight:700;
+    letter-spacing: 1px;
+    font-family: "Consolas", monospace;
+  }
+
+  /* ---------- STAGE (фон + предмети) ---------- */
+  .stage-wrap{
+    background: var(--panel);
+    border-radius: 20px;
+    padding: 14px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  #level-stage{
+    position: relative;
+    width: 100%;
+    border-radius: 14px;
+    overflow: hidden;
+    line-height: 0;
+  }
+  #level-stage img.bg-image{
+    display:block;
+    width: 100%;
+    height: auto;
+    user-select:none;
+    -webkit-user-drag:none;
+  }
+
+  .item-hotspot{
+    position:absolute;
+    transform: translate(-50%,-50%) rotate(var(--rot, 0deg));
+    cursor: pointer;
+    transition: opacity .35s ease, transform .35s ease;
+    filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5));
+  }
+  .item-hotspot img{
+    display:block;
+    width:100%;
+    height:auto;
+    pointer-events:none;
+  }
+  .item-hotspot.found{
+    opacity:0;
+    transform: translate(-50%,-50%) rotate(var(--rot, 0deg)) scale(1.5);
+    pointer-events:none;
+  }
+
+  /* ---------- ITEMS PANEL (нижня плашка) ---------- */
+  .items-panel{
+    margin-top: 18px;
+    background: linear-gradient(135deg, rgba(108,92,231,0.35), rgba(45,27,105,0.5));
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    padding: 18px 20px;
+  }
+  .items-panel .items-title{
+    display:flex;
+    justify-content: space-between;
+    align-items:baseline;
+    margin-bottom: 12px;
+  }
+  .items-panel .items-title h3{ margin:0; font-size:16px; font-weight:600; }
+  .items-panel .progress-count{ font-size: 13px; color: var(--text-dim); }
+
+  .item-cards{
+    display:flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .item-card{
+    position:relative;
+    width: 84px;
+    background: var(--panel-solid);
+    border-radius: 14px;
+    padding: 8px;
+    text-align:center;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.25);
+  }
+  .item-card .thumb-box{
+    width: 100%;
+    height: 60px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+  }
+  .item-card img{
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    transition: filter .3s ease, opacity .3s ease;
+  }
+  .item-card.found img{ filter: grayscale(85%); opacity:.45; }
+  .item-card.found::after{
+    content:"";
+    position:absolute;
+    left: 4px; right:4px; top: 44%;
+    height: 5px;
+    background: var(--danger);
+    border-radius: 3px;
+    transform: rotate(-22deg);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+
+  /* ---------- OVERLAYS (level complete / final) ---------- */
+  .overlay{
+    position: fixed;
+    inset: 0;
+    background: rgba(6,7,26,0.82);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index: 1000;
+    padding: 16px;
+  }
+  .overlay.visible{ display:flex; }
+  .overlay-card{
+    background: linear-gradient(160deg, var(--bg-purple), var(--bg-deep));
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 22px;
+    padding: 40px 48px;
+    text-align:center;
+    max-width: 420px;
+    width: 100%;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+  }
+  .overlay-card h2{ margin: 0 0 10px; font-size: 26px; }
+  .overlay-card p{ color: var(--text-dim); margin: 6px 0 22px; font-size:15px; }
+  .overlay-card .big-time{
+    font-size: 34px;
+    font-weight:700;
+    font-family:"Consolas", monospace;
+    color: var(--accent-light);
+    margin-bottom: 6px;
+  }
+  .btn{
+    display:inline-block;
+    background: linear-gradient(135deg, var(--accent), var(--accent-light));
+    color:#fff;
+    border:none;
+    padding: 12px 28px;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight:600;
+    cursor:pointer;
+    transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .btn:hover{ transform: translateY(-2px); box-shadow: 0 8px 18px rgba(108,92,231,0.45); }
+
+  /* ---------- АДАПТИВНІСТЬ ДЛЯ МОБІЛЬНИХ ---------- */
+  @media (max-width: 720px){
+    #app{ margin: 12px auto; padding: 0 10px 24px; }
+    .top-bar{ padding: 10px 14px; margin-bottom: 12px; }
+    .top-bar .level-badge{ font-size: 13px; padding: 5px 12px; }
+    .top-bar .timer{ font-size: 17px; }
+    .stage-wrap{ padding: 8px; border-radius: 16px; }
+    #level-stage{ border-radius: 10px; }
+    .items-panel{ padding: 14px; margin-top: 12px; border-radius: 14px; }
+    .items-panel .items-title h3{ font-size: 13px; }
+    .items-panel .progress-count{ font-size: 12px; }
+    .item-cards{ gap: 8px; justify-content: center; }
+    .item-card{ width: 62px; padding: 6px; border-radius: 10px; }
+    .item-card .thumb-box{ height: 44px; }
+    .overlay-card{ padding: 28px 22px; }
+    .overlay-card h2{ font-size: 21px; }
+    .overlay-card .big-time{ font-size: 27px; }
+    .btn{ padding: 10px 22px; font-size: 14px; }
+  }
+
+  @media (max-width: 400px){
+    .top-bar{ flex-wrap: wrap; gap: 8px; justify-content: center; }
+    .item-card{ width: 52px; padding: 5px; }
+    .item-card .thumb-box{ height: 36px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <div class="top-bar">
+    <div class="level-badge" id="level-badge">Рівень 1/3</div>
+    <div class="timer" id="timer-display">00:00</div>
+  </div>
+
+  <div class="stage-wrap">
+    <div id="level-stage">
+      <img class="bg-image" id="bg-image" src="" alt="Фон рівня">
+      <!-- item-hotspot елементи додаються тут через JS -->
+    </div>
+  </div>
+
+  <div class="items-panel">
+    <div class="items-title">
+      <h3 id="items-panel-title">Предмети, які тобі треба знайти:</h3>
+      <span class="progress-count" id="progress-count">0/0</span>
+    </div>
+    <div class="item-cards" id="item-cards"></div>
+  </div>
+
+</div>
+
+<!-- Level complete overlay -->
+<div class="overlay" id="level-complete-overlay">
+  <div class="overlay-card">
+    <h2 id="level-complete-title">Рівень пройдено!</h2>
+    <p id="level-complete-text">Всі предмети знайдено.</p>
+    <button class="btn" id="next-level-btn">Наступний рівень →</button>
+  </div>
+</div>
+
+<!-- Final screen overlay -->
+<div class="overlay" id="final-overlay">
+  <div class="overlay-card">
+    <h2 id="final-title">Супер-Детектив!</h2>
+    <div class="big-time" id="final-time">00:00</div>
+    <p id="final-subtitle">Вітаємо! Ти впорався з усіма рівнями.</p>
+    <button class="btn" id="restart-btn">Пройти знову</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* =========================================================
+     БАЗОВІ ШЛЯХИ ДО ЛОКАЛЬНИХ РЕСУРСІВ
+     ========================================================= */
+  const BG_PATH    = "file:///E:/рабочие проекты/клод/поиск котов/фон/";
+  const ITEMS_PATH = "file:///E:/рабочие проекты/клод/поиск котов/предмети/";
+
+  /* =========================================================
+     КОНФІГУРАЦІЯ РІВНІВ (зафіксовані фінальні позиції)
+     x, y — відсотки від ширини/висоти зображення (0-100)
+     width — ширина предмету у відсотках від ширини зображення
+     rotation — кут повороту у градусах
+     ========================================================= */
+  const LEVELS_DATA = [
+    {
+      "id": 1,
+      "background": "3f25bd79-80e7-49cb-b78a-14485ea3ab1a.png",
+      "items": [
+        { "id": "l1_zhyvchyk_1",  "file": "живчик.png",                  "name": "Живчик",              "x": 95.81, "y": 59.74, "width": 5, "rotation": 0 },
+        { "id": "l1_sonce_2",     "file": "сонце.png",                   "name": "Сонце",               "x": 96.58, "y": 18.66, "width": 6, "rotation": 0 },
+        { "id": "l1_notdisturb_3","file": "мене не діставати.png.png",   "name": "Не діставати",        "x": 57.85, "y": 18.32, "width": 3, "rotation": 0 },
+        { "id": "l1_konfetky_4",  "file": "конфетки.png",                "name": "Конфетки",            "x": 41.47, "y": 46.22, "width": 2, "rotation": 0 }
+      ]
+    },
+    {
+      "id": 2,
+      "background": "85a2387b-1cef-4e92-ab84-1343772b290b.png",
+      "items": [
+        { "id": "l2_sonce_5",     "file": "сонце.png",                   "name": "Сонце",               "x": 93.21, "y": 18.83, "width": 6, "rotation": 0 },
+        { "id": "l2_novorichna_6","file": "табличка новорічна.png.png",  "name": "Новорічна табличка",  "x": 81.55, "y": 43.48, "width": 5, "rotation": 0 },
+        { "id": "l2_zlytky_7",    "file": "злитки.png",                  "name": "Злитки",              "x": 98.22, "y": 64.54, "width": 4, "rotation": 0 },
+        { "id": "l2_konfetky_9",  "file": "конфетки.png",                "name": "Конфетки",            "x": 65.66, "y": 40.57, "width": 2, "rotation": 0 },
+        { "id": "l2_zhyvchyk_10", "file": "живчик.png",                  "name": "Живчик",              "x": 38.2,  "y": 28.76, "width": 3, "rotation": 0 },
+        { "id": "l2_karta_11",    "file": "карта.png",                   "name": "Карта",               "x": 20.18, "y": 81.65, "width": 3, "rotation": 350 }
+      ]
+    },
+    {
+      "id": 3,
+      "background": "98296f35-5369-44a9-9d16-b8d15b0b72eb.png",
+      "items": [
+        { "id": "l3_sonce_14",     "file": "сонце.png",                  "name": "Сонце",               "x": 93.59, "y": 27.05, "width": 6, "rotation": 0 },
+        { "id": "l3_banka_15",     "file": "банка.png",                  "name": "Банка",               "x": 10.45, "y": 33.89, "width": 4, "rotation": 11 },
+        { "id": "l3_zhyvchyk_17",  "file": "живчик.png",                 "name": "Живчик",              "x": 3.9,   "y": 66.59, "width": 5, "rotation": 0 },
+        { "id": "l3_zhyvchyk_18",  "file": "живчик.png",                 "name": "Живчик",              "x": 77.31, "y": 69.67, "width": 5, "rotation": 0 },
+        { "id": "l3_konfetky_19",  "file": "конфетки.png",               "name": "Конфетки",            "x": 43.59, "y": 80.46, "width": 4, "rotation": 0 },
+        { "id": "l3_karta_20",     "file": "карта.png",                  "name": "Карта",               "x": 14.69, "y": 59.74, "width": 4, "rotation": 351 },
+        { "id": "l3_notdisturb_21","file": "мене не діставати.png.png",  "name": "Не діставати",        "x": 66.14, "y": 59.06, "width": 4, "rotation": 0 },
+        { "id": "l3_hryvni1_22",   "file": "пачка грршей.png",           "name": "Пачка гривень",       "x": 64.98, "y": 44.51, "width": 4, "rotation": 0 },
+        { "id": "l3_zlytky_23",    "file": "злитки.png",                 "name": "Злитки",              "x": 98.22, "y": 53.58, "width": 4, "rotation": 0 },
+        { "id": "l3_elixir_24",    "file": "еліксир.png",                "name": "Еліксир",             "x": 5.92,  "y": 40.4,  "width": 3, "rotation": 356 },
+        { "id": "l3_hryvni2_25",   "file": "пачка100грн.png",            "name": "100 грн",             "x": 5.25,  "y": 23.45, "width": 3, "rotation": 9 },
+        { "id": "l3_novorichna_26","file": "табличка новорічна.png.png", "name": "Новорічна табличка",  "x": 69.8,  "y": 47.93, "width": 6, "rotation": 0 }
+      ]
+    }
+  ];
+
+  /* =========================================================
+     СТАН ГРИ
+     ========================================================= */
+  let currentLevelIndex = 0;
+  let foundSet = new Set();
+  let timerStart = null;
+  let timerInterval = null;
+
+  /* =========================================================
+     DOM
+     ========================================================= */
+  const stageEl          = document.getElementById("level-stage");
+  const bgImageEl        = document.getElementById("bg-image");
+  const levelBadgeEl     = document.getElementById("level-badge");
+  const timerDisplayEl   = document.getElementById("timer-display");
+  const itemCardsEl      = document.getElementById("item-cards");
+  const itemsPanelTitleEl= document.getElementById("items-panel-title");
+  const progressCountEl  = document.getElementById("progress-count");
+  const levelCompleteOverlay = document.getElementById("level-complete-overlay");
+  const levelCompleteTitle   = document.getElementById("level-complete-title");
+  const levelCompleteText    = document.getElementById("level-complete-text");
+  const nextLevelBtn     = document.getElementById("next-level-btn");
+  const finalOverlay     = document.getElementById("final-overlay");
+  const finalTitleEl     = document.getElementById("final-title");
+  const finalTimeEl      = document.getElementById("final-time");
+  const finalSubtitleEl  = document.getElementById("final-subtitle");
+  const restartBtn       = document.getElementById("restart-btn");
+
+  /* =========================================================
+     ТАЙМЕР
+     ========================================================= */
+  function formatTime(totalSeconds){
+    const m = Math.floor(totalSeconds / 60);
+    const s = Math.floor(totalSeconds % 60);
+    return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+  }
+
+  function startTimer(){
+    timerStart = performance.now();
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      const elapsed = (performance.now() - timerStart) / 1000;
+      timerDisplayEl.textContent = formatTime(elapsed);
+    }, 250);
+  }
+
+  function stopTimer(){
+    clearInterval(timerInterval);
+    timerInterval = null;
+    return (performance.now() - timerStart) / 1000;
+  }
+
+  /* =========================================================
+     РЕНДЕР РІВНЯ
+     ========================================================= */
+  function loadLevel(index){
+    currentLevelIndex = index;
+    foundSet = new Set();
+    const level = LEVELS_DATA[index];
+
+    levelBadgeEl.textContent = `Рівень ${level.id}/${LEVELS_DATA.length}`;
+    bgImageEl.src = BG_PATH + level.background;
+
+    renderStageItems(level);
+    renderItemsPanel(level);
+    updateProgressCount(level);
+  }
+
+  function renderStageItems(level){
+    stageEl.querySelectorAll(".item-hotspot").forEach(el => el.remove());
+
+    level.items.forEach(item => {
+      const hotspot = document.createElement("div");
+      hotspot.className = "item-hotspot";
+      hotspot.dataset.itemId = item.id;
+      hotspot.style.left = item.x + "%";
+      hotspot.style.top = item.y + "%";
+      hotspot.style.width = item.width + "%";
+      hotspot.style.setProperty("--rot", (item.rotation || 0) + "deg");
+
+      const img = document.createElement("img");
+      img.src = ITEMS_PATH + item.file;
+      img.alt = item.name;
+      hotspot.appendChild(img);
+
+      hotspot.addEventListener("click", () => handleItemFound(item.id));
+
+      stageEl.appendChild(hotspot);
+    });
+  }
+
+  function renderItemsPanel(level){
+    itemsPanelTitleEl.textContent = "Предмети, які тобі треба знайти:";
+    itemCardsEl.innerHTML = "";
+    level.items.forEach(item => {
+      const card = document.createElement("div");
+      card.className = "item-card";
+      card.dataset.itemId = item.id;
+      if (foundSet.has(item.id)) card.classList.add("found");
+
+      const thumbBox = document.createElement("div");
+      thumbBox.className = "thumb-box";
+      const img = document.createElement("img");
+      img.src = ITEMS_PATH + item.file;
+      img.alt = item.name;
+      thumbBox.appendChild(img);
+
+      card.appendChild(thumbBox);
+      itemCardsEl.appendChild(card);
+    });
+  }
+
+  function updateProgressCount(level){
+    progressCountEl.textContent = `${foundSet.size}/${level.items.length}`;
+  }
+
+  /* =========================================================
+     ЛОГІКА ЗНАХОДЖЕННЯ ПРЕДМЕТІВ
+     ========================================================= */
+  function handleItemFound(itemId){
+    if (foundSet.has(itemId)) return;
+    foundSet.add(itemId);
+
+    const level = LEVELS_DATA[currentLevelIndex];
+
+    const hotspot = stageEl.querySelector(`.item-hotspot[data-item-id="${itemId}"]`);
+    if (hotspot) hotspot.classList.add("found");
+
+    const card = itemCardsEl.querySelector(`.item-card[data-item-id="${itemId}"]`);
+    if (card) card.classList.add("found");
+
+    updateProgressCount(level);
+
+    if (foundSet.size === level.items.length){
+      setTimeout(() => showLevelComplete(level), 500);
+    }
+  }
+
+  function showLevelComplete(level){
+    const isLastLevel = currentLevelIndex === LEVELS_DATA.length - 1;
+    levelCompleteTitle.textContent = "Рівень пройдено!";
+    levelCompleteText.textContent = `Ти знайшов усі предмети рівня ${level.id}.`;
+    nextLevelBtn.textContent = isLastLevel ? "Завершити гру →" : "Наступний рівень →";
+    levelCompleteOverlay.classList.add("visible");
+  }
+
+  nextLevelBtn.addEventListener("click", () => {
+    levelCompleteOverlay.classList.remove("visible");
+    const isLastLevel = currentLevelIndex === LEVELS_DATA.length - 1;
+    if (isLastLevel){
+      finishGame();
+    } else {
+      loadLevel(currentLevelIndex + 1);
+    }
+  });
+
+  /* =========================================================
+     ФІНАЛЬНИЙ ЕКРАН
+     ========================================================= */
+  function getTitleForTime(seconds){
+    if (seconds <= 60)  return "Супер-Детектив!";
+    if (seconds <= 120) return "Майстер Котиків!";
+    if (seconds <= 240) return "Уважний Спостерігач";
+    return "Наполегливий Шукач";
+  }
+
+  function finishGame(){
+    const totalSeconds = stopTimer();
+    finalTitleEl.textContent = getTitleForTime(totalSeconds);
+    finalTimeEl.textContent = formatTime(totalSeconds);
+    const m = Math.floor(totalSeconds / 60);
+    const s = Math.floor(totalSeconds % 60);
+    finalSubtitleEl.textContent = `Вітаємо! Ти впорався за ${String(m).padStart(2,"0")} хв ${String(s).padStart(2,"0")} сек.`;
+    finalOverlay.classList.add("visible");
+  }
+
+  restartBtn.addEventListener("click", () => {
+    finalOverlay.classList.remove("visible");
+    startGame();
+  });
+
+  /* =========================================================
+     СТАРТ / РЕСТАРТ ГРИ
+     ========================================================= */
+  function startGame(){
+    loadLevel(0);
+    startTimer();
+  }
+
+  startGame();
+
+})();
+</script>
+
+</body>
+</html>
